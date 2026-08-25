@@ -61,6 +61,7 @@ class Logger:
         self.base_data_dir = base_data_dir
         self.run_dir = self._create_run_directory()
         self.chassis = ep_robot.chassis
+        self.tof_sensor = ep_robot.sensor
         self.sensor_adaptor = ep_robot.sensor_adaptor
         self.start_time = time.time()
 
@@ -74,6 +75,7 @@ class Logger:
             "imu": None,
             "esc": None,
             "status": None,
+            "tof": None,
         }
         self._ready = {name: threading.Event() for name in self._latest}
 
@@ -153,7 +155,7 @@ class Logger:
                     writer.writerow(header)
                 writer.writerows(rows)
 
-    def _record_chassis_sample(self, name, sub_info, filename, header):
+    def _record_telemetry_sample(self, name, sub_info, filename, header):
         timestamp = time.time()
         values = tuple(sub_info)
 
@@ -172,7 +174,7 @@ class Logger:
         )
 
     def sub_attitude_info_handler(self, sub_info):
-        self._record_chassis_sample(
+        self._record_telemetry_sample(
             "attitude",
             sub_info,
             "log_attitude.csv",
@@ -180,7 +182,7 @@ class Logger:
         )
 
     def sub_position_info_handler(self, sub_info):
-        self._record_chassis_sample(
+        self._record_telemetry_sample(
             "position",
             sub_info,
             "log_position.csv",
@@ -188,7 +190,7 @@ class Logger:
         )
 
     def sub_imu_info_handler(self, sub_info):
-        self._record_chassis_sample(
+        self._record_telemetry_sample(
             "imu",
             sub_info,
             "log_imu.csv",
@@ -196,7 +198,7 @@ class Logger:
         )
 
     def sub_esc_info_handler(self, sub_info):
-        self._record_chassis_sample(
+        self._record_telemetry_sample(
             "esc",
             sub_info,
             "log_esc.csv",
@@ -204,7 +206,7 @@ class Logger:
         )
 
     def sub_status_info_handler(self, sub_info):
-        self._record_chassis_sample(
+        self._record_telemetry_sample(
             "status",
             sub_info,
             "log_status.csv",
@@ -221,6 +223,15 @@ class Logger:
                 "status_roll_over",
                 "status_hill_static",
             ],
+        )
+
+    def sub_distance_info_handler(self, sub_info):
+        """Store and log the four ToF distances supplied by the SDK in mm."""
+        self._record_telemetry_sample(
+            "tof",
+            sub_info,
+            "log_tof.csv",
+            ["tof_1_mm", "tof_2_mm", "tof_3_mm", "tof_4_mm"],
         )
 
     def sub_sharp_info_handler(self, adapter_info):
@@ -340,6 +351,15 @@ class Logger:
     def get_status(self):
         return self.get_latest("status")
 
+    def get_tof(self, sensor_id=None):
+        """Return all ToF values, or one 1-based sensor value, in millimetres."""
+        if sensor_id is not None and sensor_id not in (1, 2, 3, 4):
+            raise ValueError("sensor_id must be in the range 1..4")
+        distances = self.get_latest("tof")
+        if sensor_id is None or distances is None:
+            return distances
+        return distances[sensor_id - 1]
+
     def wait_until_ready(self, name, timeout=3.0):
         """Wait until a chassis telemetry subject has delivered one sample."""
         if name not in self._ready:
@@ -405,6 +425,13 @@ class Logger:
             callback=self.sub_status_info_handler,
         )
 
+    def start_tof_log(self, feq=20):
+        self._validate_frequency(feq)
+        return self.tof_sensor.sub_distance(
+            freq=feq,
+            callback=self.sub_distance_info_handler,
+        )
+
     def start_sharp_log(self, feq=20):
         self._validate_frequency(feq)
         if not self._sharp_channels:
@@ -427,6 +454,7 @@ class Logger:
         feq_esc=5,
         feq_status=5,
         feq_sharp=20,
+        feq_tof=20,
     ):
         results = {
             "attitude": self.start_attitude_log(feq_att),
@@ -434,6 +462,7 @@ class Logger:
             "imu": self.start_imu_log(feq_imu),
             "esc": self.start_esc_log(feq_esc),
             "status": self.start_status_log(feq_status),
+            "tof": self.start_tof_log(feq_tof),
         }
         if self._sharp_channels:
             results["sharp"] = self.start_sharp_log(feq_sharp)
@@ -454,6 +483,9 @@ class Logger:
     def stop_status_log(self):
         return self.chassis.unsub_status()
 
+    def stop_tof_log(self):
+        return self.tof_sensor.unsub_distance()
+
     def stop_sharp_log(self):
         if not self._sharp_subscribed:
             return True
@@ -468,6 +500,7 @@ class Logger:
             "imu": self.stop_imu_log(),
             "esc": self.stop_esc_log(),
             "status": self.stop_status_log(),
+            "tof": self.stop_tof_log(),
         }
         if self._sharp_subscribed:
             results["sharp"] = self.stop_sharp_log()
