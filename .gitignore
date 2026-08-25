@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# C extensions
+*.so
+
+# Environments (Python virtual environments)
+.env
+.venv
+env/
+venv/
+ENV/
+robo_venv/
+env.bak/
+venv.bak/
+
+# IDEs, editors and OS metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# RoboMaster Lab Data & Telemetry logs
+data/
+*.csv
+*.log
+
+# Antigravity agent configuration
+.agents/
+.agent/
